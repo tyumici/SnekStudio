@@ -254,7 +254,7 @@ func reset_settings_to_default() -> void:
 	colliders_by_model_name = {}
 
 	# Reset model to default.
-	load_vrm("res://SampleModels/VRM/samplesnek15b.vrm")
+	load_vrm("res://SampleModels/VRM/samplesnek_mediapipe_16.vrm")
 
 	# Clear mods list.
 	var mods_to_delete = $Mods.get_children()
@@ -523,6 +523,13 @@ func save_settings(path : String = ""):
 	if settings_filename == "":
 		settings_filename = _get_default_settings_path()
 	
+	# Create settings directory if it doesn't already exist
+	var settings_dir = ProjectSettings.globalize_path(settings_filename.get_basename())
+	if not DirAccess.dir_exists_absolute(settings_dir):
+		if DirAccess.make_dir_recursive_absolute(settings_dir) != OK:
+			push_error("Failed to create settings directory: " + settings_dir)
+			return
+	
 	# Convert settings to JSON and save.
 	var save_string = JSON.stringify(settings_to_save, "  ")
 	var file = FileAccess.open(settings_filename, FileAccess.WRITE)
@@ -555,7 +562,7 @@ func load_settings(path : String = ""):
 				"mirror_mode": true,
 				"tracking_pause": false,
 				"use_mediapipe_shapes": true,
-				"use_vrm_basic_shapes": false,
+				"use_vrm_basic_shapes": true,
 				"video_device": []
 				}
 			},
@@ -571,6 +578,11 @@ func load_settings(path : String = ""):
 				"light_directional_pitch": -37.8007940368435,
 				"light_directional_yaw": 36.680506409178
 				}
+			},
+			{
+				"name": "AnimationApplier",
+				"scene_path": "res://Mods/AnimationApplier/AnimationApplier.tscn",
+				"settings": { }
 			}
 		]}
 
@@ -667,6 +679,10 @@ func load_vrm(path) -> bool:
 	var ui_collider_window = ui_root.get_node_or_null("%SettingsWindow_Colliders")
 	for k in collider_data:
 		k["visible"] = ui_collider_window.visible
+
+	# Force initial T-Pose.
+	var skel : Skeleton3D = get_skeleton()
+	skel.reset_bone_poses()
 
 	set_colliders(collider_data)
 

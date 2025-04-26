@@ -34,7 +34,7 @@ var _ikchains = []
 @export var arm_reset_time : float = 0.5
 @export var arm_reset_speed : float = 0.1
 @export var hand_tracking_enabed : bool = true
-var use_vrm_basic_shapes = false
+var use_vrm_basic_shapes = true
 var use_mediapipe_shapes = true
 var video_device = Array() # It's an array that we only ever put one thing in.
 
@@ -158,6 +158,9 @@ var eyes_prevent_opposite_directions : bool = true
 # Last packet we got, in case we need to process it again on a frame that
 # received no data. (FIXME: hack)
 var last_packet_received = null
+
+# What we should show in the new error/warning reporting.
+var _current_error_to_show : String = ""
 
 func _get_property_list() -> Array[Dictionary]:
 
@@ -440,6 +443,17 @@ func _ready():
 			get_app().get_controller().reset_skeleton_to_rest_pose()
 			get_app().get_controller().reset_blend_shapes()
 			blend_shape_last_values = {}
+	)
+
+	var reset_pose_button2 : Button = Button.new()
+	reset_pose_button2.text = "Reset pose - Just hips (FIXME)"
+	get_settings_window().add_child(reset_pose_button2)
+	reset_pose_button2.pressed.connect(
+		func():
+			var skel : Skeleton3D = get_app().get_skeleton()
+			var hips_index : int = skel.find_bone("Hips")
+			if hips_index != -1:
+				skel.reset_bone_pose(hips_index)
 	)
 
 	_update_for_new_model_if_needed()
@@ -941,7 +955,8 @@ func _process_single_packet(model : Node3D, delta : float, parsed_data : Diction
 		return
 
 	if "error" in parsed_data:
-		set_status("Error: " + parsed_data["error"])
+		_current_error_to_show = "Error: " + parsed_data["error"]
+		set_status(_current_error_to_show)
 		return
 
 	set_status("Receiving tracker data")
@@ -1046,10 +1061,14 @@ func _process_single_packet(model : Node3D, delta : float, parsed_data : Diction
 			shape_dict_new = functions_blendshapes.apply_rest_shapes(
 				blend_shape_last_values, delta, blend_to_rest_speed)
 
-		functions_blendshapes.apply_animations(
-			model, shape_dict_new)
+		# Send it over to the AnimationApplier.
+		var blend_shapes_to_apply : Dictionary = get_global_mod_data("BlendShapes")
+		blend_shapes_to_apply.clear()
+		blend_shapes_to_apply.merge(shape_dict_new)
 
 		blend_shape_last_values = shape_dict_new
+
+	_current_error_to_show = ""
 
 func process_new_packets(model, delta):
 	var most_recent_packet = null
@@ -1433,7 +1452,7 @@ func _process(delta):
 		# IK stuff starts here
 
 		# Arm IK.
-
+		
 		var x_pole_dist = 10.0
 		var z_pole_dist = 10.0
 		var y_pole_dist = 5.0
@@ -1746,4 +1765,17 @@ func update_hand(hand, parsed_data, skel : Skeleton3D):
 			skel.set_bone_pose_rotation(test_bone_index, Basis())
 		else:
 			rotate_bone_in_global_space(skel, test_bone_index, global_rotation_from_rest, -angle_between)
-		
+
+func check_configuration() -> PackedStringArray:
+	var errors : PackedStringArray = []
+
+	if video_device == ["None"] or len(video_device) == 0:
+		errors.append("No camera is currently selected.")
+
+	if len(_current_error_to_show):
+		errors.append(_current_error_to_show)
+
+	if not check_mod_dependency("Mod_AnimationApplier", true):
+		errors.append("No AnimationApplier detected, or detected before MediaPipeController. Blend shapes will not function as expected.")
+
+	return errors
