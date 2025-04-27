@@ -542,3 +542,8 @@ func _on_popout_button_pressed() -> void:
 	_set_popped_out(true)
 
 #endregion
+
+
+func _on_button_pressed() -> void:
+	%TwitchChat.show_window()
+	pass # Replace with function body.
