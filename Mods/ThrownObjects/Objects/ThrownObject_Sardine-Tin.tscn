@@ -1,0 +1,34 @@
+[gd_scene load_steps=6 format=3 uid="uid://7y5dm0er62bc"]
+
+[ext_resource type="PackedScene" uid="uid://fhm0lw7jf81x" path="res://Mods/ThrownObjects/ObjectBase/ThrownObject.tscn" id="1_uo166"]
+[ext_resource type="Shader" uid="uid://bk88vaf1p35ef" path="res://Mods/ThrownObjects/ObjectBase/ThrownObject_SpriteShader.gdshader" id="2_0cy2q"]
+[ext_resource type="Texture2D" uid="uid://dtiav1kws6bea" path="res://Core/UI/Images/kiri_smug.png" id="3_dnon2"]
+[ext_resource type="PackedScene" uid="uid://mkkjn6suqiar" path="res://Mods/ThrownObjects/Objects/Sardine-Tin/Sardine-Tin.glb" id="4_5twtw"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ekth6"]
+resource_local_to_scene = true
+render_priority = 0
+shader = ExtResource("2_0cy2q")
+shader_parameter/texture_albedo = ExtResource("3_dnon2")
+shader_parameter/rotation = 0.0
+shader_parameter/uniform_scale = 1.0
+
+[node name="ThrownObject" instance=ExtResource("1_uo166")]
+
+[node name="MeshInstance" parent="." index="0"]
+visible = false
+
+[node name="CollisionShape" parent="." index="1"]
+visible = false
+
+[node name="AudioStreamPlayer3D" parent="." index="2"]
+visible = false
+
+[node name="Sprite3D" parent="." index="3"]
+visible = false
+material_override = SubResource("ShaderMaterial_ekth6")
+
+[node name="Particles" parent="." index="4"]
+visible = false
+
+[node name="Sardine-Tin" parent="." index="5" instance=ExtResource("4_5twtw")]
