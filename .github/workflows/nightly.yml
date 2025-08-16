@@ -1,7 +1,7 @@
 name: Nightly build
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
   workflow_call:
   repository_dispatch:
     types: [nightly-trigger]
@@ -11,12 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:bookworm
 
+    outputs:
+      version: ${{ steps.ver_exp.outputs.version }}
+
     steps:
       # Install git.
     - name: Git
       run: |
         apt-get update
-        apt-get install -y git
+        apt-get install -y git nodejs
 
       # check out git repository.
     - name: Checkout repository
@@ -37,35 +40,47 @@ jobs:
       run: |
         Build/run_this_inside_debian_container_to_build.bsh
 
+      # set the version for flatpak
+    - name: Version Export
+      id: ver_exp
+      shell: bash
+      run: |
+          source Build/build_vars.sh
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Upload built files as artifact
+      uses: actions/upload-artifact@v4
+      with:
+          name: build-output
+          path: Build/Builds/Dist/
+
     - name: 🏷️ Create/update nightly tag
       uses: actions/github-script@v7
       with:
-        script: |
-          github.rest.git.createRef({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: 'refs/tags/nightly',
-            sha: context.sha
-          }).catch(err => {
-            if (err.status !== 422) throw err;
-            github.rest.git.updateRef({
+          script: |
+            github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: 'tags/nightly',
+              ref: 'refs/tags/nightly',
               sha: context.sha
-            });
-          })
-
+            }).catch(err => {
+              if (err.status !== 422) throw err;
+              github.rest.git.updateRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/nightly',
+                sha: context.sha
+              });
+            })
     - name: Delete old release assets
       uses: mknejp/delete-release-assets@v1
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag: nightly
-        fail-if-no-assets: false
-        fail-if-no-release: false
-        assets: |
-          *
-
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: nightly
+          fail-if-no-assets: false
+          fail-if-no-release: false
+          assets: |
+            *
     - name: Release to nightly tag
       uses: softprops/action-gh-release@v2
       with:
@@ -74,3 +89,72 @@ jobs:
         tag_name: nightly
         prerelease: true
         files: "Build/Builds/Dist/SnekStudio_*"
+          
+  #~ flaptak:
+    #~ needs: build
+    #~ runs-on: ubuntu-latest
+    #~ container: debian:bookworm
+    #~ steps:
+
+    #~ # Install git.
+    #~ - name: Git
+      #~ run: |
+        #~ apt-get update
+        #~ apt-get install -y git nodejs flatpak flatpak-builder binfmt-support qemu-user-static
+
+    #~ - name: Checkout repository
+      #~ uses: actions/checkout@v4
+      #~ with:
+          #~ submodules: true
+          #~ fetch-depth: "0"
+          #~ fetch-tags: true
+
+    #~ - name: Download build output
+      #~ uses: actions/download-artifact@v4
+      #~ with:
+          #~ name: build-output
+          #~ path: Build/Builds/Dist/
+    #~ - name: set VERSION
+      #~ run: echo "VERSION=${{ needs.build.outputs.VERSION }}" >> $GITHUB_ENV
+    #~ - name: Build
+      #~ run: |
+          #~ Build/run_this_inside_ubuntu_after_build.bsh
+
+
+    #~ - name: 🏷️ Create/update nightly tag
+      #~ uses: actions/github-script@v7
+      #~ with:
+        #~ script: |
+          #~ github.rest.git.createRef({
+            #~ owner: context.repo.owner,
+            #~ repo: context.repo.repo,
+            #~ ref: 'refs/tags/nightly',
+            #~ sha: context.sha
+          #~ }).catch(err => {
+            #~ if (err.status !== 422) throw err;
+            #~ github.rest.git.updateRef({
+              #~ owner: context.repo.owner,
+              #~ repo: context.repo.repo,
+              #~ ref: 'tags/nightly',
+              #~ sha: context.sha
+            #~ });
+          #~ })
+
+    #~ - name: Delete old release assets
+      #~ uses: mknejp/delete-release-assets@v1
+      #~ with:
+        #~ token: ${{ secrets.GITHUB_TOKEN }}
+        #~ tag: nightly
+        #~ fail-if-no-assets: false
+        #~ fail-if-no-release: false
+        #~ assets: |
+          #~ *
+
+    #~ - name: Release to nightly tag
+      #~ uses: softprops/action-gh-release@v2
+      #~ with:
+          #~ name: Nightly build
+          #~ body: Auto generated release
+          #~ tag_name: nightly
+          #~ prerelease: true
+          #~ files: "Build/Builds/Dist/SnekStudio_*"
