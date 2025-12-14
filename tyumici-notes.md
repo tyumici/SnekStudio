@@ -20,3 +20,7 @@
 - Use mod_base in a parent element, to get chat
 - Feed down to a rich text element to show each?
 - How to create new elements on the fly
+
+## Twitch Auth
+
+If it's failing, turn off your vpn and check. It will break if you turn the vpn back on
