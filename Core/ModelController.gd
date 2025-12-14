@@ -80,11 +80,11 @@ func get_skeleton() -> Skeleton3D:
 		return null
 
 	# Try to find the skeleton on the secondary object first.
-	var secondary = $Model.get_node("secondary")
-	if secondary:
-		if secondary is VRMSecondary:
-			var skeleton2 : Skeleton3D = secondary.get_node(secondary.skeleton)
-			return skeleton2
+	#var secondary = $Model.get_node("secondary")
+	#if secondary:
+		#if secondary is VRMSecondary:
+			#var skeleton2 : Skeleton3D = secondary.get_node(secondary.skeleton)
+			#return skeleton2
 
 	# Buggy fallback.
 	var skeleton = get_model().find_child("GeneralSkeleton", true, false)
