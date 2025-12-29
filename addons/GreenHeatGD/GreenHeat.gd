@@ -9,9 +9,9 @@ signal drag_received(packet: Dictionary) ## An exposed signal for detecting when
 signal drag_release_received(packet: Dictionary) ## An exposed signal for detecting when someone is done dragging.
 
 @export var detecting = true ## This enables / disables the clickmap on the fly.
-@export var channel_name = "" ## This is the channel name that GreenHeat is checking.
+@export var channel_name = "tyumici" ## This is the channel name that GreenHeat is checking.
 
-var debug = false ## This will flood your console with verbose information regarding the websocket connection.
+var debug = true #false ## This will flood your console with verbose information regarding the websocket connection.
 
 var _ws := WebSocketPeer.new()
 

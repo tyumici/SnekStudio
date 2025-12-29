@@ -774,3 +774,6 @@ static func get_added_mods_locations() -> PackedStringArray:
 		for global_path : String in paths_global:
 			paths_localized.append(ProjectSettings.localize_path(global_path))
 	return paths_localized
+
+func _on_green_heat_click_received(packet: Dictionary) -> void:
+	print('hello')
