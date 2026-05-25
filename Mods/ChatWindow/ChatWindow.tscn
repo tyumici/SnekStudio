@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://dghwfyi54qlq7"]
+
+[ext_resource type="Script" uid="uid://c5hiypf5kpwkl" path="res://Mods/ChatWindow/chat_window.gd" id="1_ppi18"]
+
+[node name="ChatWindow" type="Node3D" unique_id=667080165]
+script = ExtResource("1_ppi18")
+metadata/_custom_type_script = "uid://bsjotf2wtnmeq"
+
+[node name="ChatContainer" type="Container" parent="." unique_id=813598810]
+offset_left = 2.0
+offset_top = 720.0
+offset_right = 671.0
+offset_bottom = 1071.0

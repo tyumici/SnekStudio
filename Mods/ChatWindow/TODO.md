@@ -1,0 +1,15 @@
+- Get user picture
+	- Show picture next to username
+- Get sub status and have some kind of effect
+	- Border, or show the sub badge
+- Get radiate dose value and add glow effect
+	- Glow increase by gradual value between 0-100k, normalize 0-10
+- Add effect for message enter
+- Add effect for message leave
+- Set all messages to expire 30s
+- Filter out !bang commands
+- Add some kinda of effect for !radiate command response, or anything from tinymici
+- Disapear the chatbox if no messages
+- Add visibility toggle to mod settings
+- Figure how out to update the font size
+- Fix chat box size so content wraps

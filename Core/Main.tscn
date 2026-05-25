@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://dq62o1q7l83ro" path="res://Core/CameraBoom/CameraBoom.tscn" id="3_ur4kn"]
 [ext_resource type="Script" uid="uid://v8u2efcjmg73" path="res://Core/ModelController.gd" id="5_upw4c"]
 [ext_resource type="Shader" uid="uid://0om5ta3s57os" path="res://Core/Materials/debug_mesh.gdshader" id="6_fxul2"]
+[ext_resource type="PackedScene" uid="uid://dghwfyi54qlq7" path="res://Mods/ChatWindow/ChatWindow.tscn" id="7_fauey"]
 [ext_resource type="Script" uid="uid://bhjru7482htmb" path="res://Core/AudioInput/AudioStreamRecord.gd" id="10_dpnxj"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nh3ai"]
@@ -76,3 +77,5 @@ script = ExtResource("10_dpnxj")
 [node name="DebugMesh" type="MeshInstance3D" parent="." unique_id=1521247506]
 material_override = SubResource("ShaderMaterial_fauey")
 mesh = SubResource("ImmediateMesh_mmo8m")
+
+[node name="ChatWindow" parent="." unique_id=1780794121 instance=ExtResource("7_fauey")]

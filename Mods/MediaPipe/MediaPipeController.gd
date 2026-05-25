@@ -610,9 +610,11 @@ func _process_new_packets(delta):
 
 	if dropped_packets > 0:
 		if dropped_packets <= 2:
-			print_log(["Dropped packets (within tolerance): ", dropped_packets])
+			#print_log(["Dropped packets (within tolerance): ", dropped_packets])
+			pass
 		else:
-			print_log(["Dropped packets (WARNING): ", dropped_packets])
+			#print_log(["Dropped packets (WARNING): ", dropped_packets])
+			pass
 
 	# Write blendshapes (even if we didn't get any packets).
 	var blend_shapes_to_apply : Dictionary = get_global_mod_data("BlendShapes")
