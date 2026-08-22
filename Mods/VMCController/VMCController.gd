@@ -131,7 +131,7 @@ func scene_shutdown() -> void:
 	var skeleton : Skeleton3D = get_skeleton()
 	skeleton.global_position = Vector3(0.0, 0.0, 0.0)
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 
 	if playback_enabled:
 
@@ -330,7 +330,7 @@ func _on_OSCServer_message_received(address_string, arguments):
 				
 					var object_to_animate : Node = anim_root.get_node(anim_path_max_value_key)
 					if object_to_animate:
-						print(object_to_animate, anim_path_max_value_key)
+						#print(object_to_animate, anim_path_max_value_key)
 						object_to_animate.set(
 							"blend_shapes/" + anim_path_max_value_key.get_subname(0),
 							anim_path_maximums[anim_path_max_value_key])
