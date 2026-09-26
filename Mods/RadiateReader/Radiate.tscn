@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://b52va5f64xr1k"]
+
+[ext_resource type="Script" uid="uid://cu88p2uaog2ug" path="res://Mods/RadiateReader/Radiate.gd" id="1_i3i5j"]
+
+[node name="Radiate" type="Node3D" unique_id=649926866]
+script = ExtResource("1_i3i5j")
+metadata/_custom_type_script = "uid://bsjotf2wtnmeq"
