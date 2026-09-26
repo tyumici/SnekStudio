@@ -183,7 +183,8 @@ func add_tracked_setting(
 		new_widget = settings_window_add_lineedit(
 			new_setting_prop["label"], new_setting_prop["name"],
 			new_setting_prop["args"].get("is_redeem", false),
-			new_setting_prop["args"].get("is_fileaccess", false))
+			new_setting_prop["args"].get("is_fileaccess", false),
+			new_setting_prop["args"].get("file_filters", []))
 
 	elif prop_val is bool:
 		new_widget = settings_window_add_boolean(new_setting_prop["label"], new_setting_prop["name"])
@@ -811,7 +812,7 @@ func settings_window_add_selector(
 						selection_widget.select(idx, single)
 
 		selection_widget.multi_selected.connect(
-			(func(_index, selected, widget): callback.call(widget)).bind(selection_widget))
+			(func(_index, _selected, widget): callback.call(widget)).bind(selection_widget))
 
 	reset_default.pressed.connect(
 		reset_default_action.bind(default_value)

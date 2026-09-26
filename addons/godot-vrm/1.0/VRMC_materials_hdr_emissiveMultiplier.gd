@@ -1,3 +1,4 @@
+@tool
 extends GLTFDocumentExtension
 
 
@@ -21,7 +22,7 @@ func _import_post(state, root):
 				material.emission_energy_multiplier = khr_emissive["emissiveStrength"]
 			elif vrmc_emissive.has("emissiveMultiplier"):
 				material.emission_energy_multiplier = vrmc_emissive["emissiveMultiplier"]
-	return 0
+	return OK
 
 
 func _export(state: GLTFState, extensions = PackedStringArray()) -> Error:
@@ -44,4 +45,4 @@ func _export_post(state: GLTFState):
 				json_material["extensions"]["KHR_materials_emissive_strength"] = {
 					"emissiveStrength": material.emission_energy_multiplier,
 				}
-	return 0
+	return OK
