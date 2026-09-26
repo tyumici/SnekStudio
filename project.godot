@@ -38,7 +38,6 @@ gdscript/warnings/integer_division=0
 window/size/transparent=true
 window/subwindows/embed_subwindows=false
 window/per_pixel_transparency/allowed=true
-window/vsync/vsync_mode=0
 
 [editor_plugins]
 
