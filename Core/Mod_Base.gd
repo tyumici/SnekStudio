@@ -215,7 +215,10 @@ func add_tracked_setting(
 
 	elif prop_val is Vector3:
 		new_widget = settings_window_add_vector3(
-			new_setting_prop["label"], new_setting_prop["name"])
+			new_setting_prop["label"], new_setting_prop["name"],
+			new_setting_prop["args"].get("min", -100.0),
+			new_setting_prop["args"].get("max", 100.0),
+			new_setting_prop["args"].get("step", 0.01))
 
 	else:
 		# I don't recognize that type for a new setting.
@@ -375,11 +378,8 @@ func add_autodelete_object(ob : Node):
 	ob.add_to_group(_get_autodelete_group_name())
 
 ## Get the main app (Main.gd) class instance.
-func get_app():
-	var current = self
-	while current.name != "SnekStudio_Main":
-		current = current.get_parent()
-	return current
+func get_app() -> SnekStudioMain:
+	return find_parent("SnekStudio_Main")
 
 ## Get the VTuber model's skeleton.
 func get_skeleton() -> Skeleton3D:
@@ -472,13 +472,15 @@ func send_global_mod_message(key : String, values : Dictionary, skip_current : b
 
 ## Check whether a required mod comes before or after this mod.
 ##
+## The mod can be either a String to match class_name (not always available),
+## a Script instance (get using preload), or a direct reference to a mod node
+## (get with get_node("../ModName"), though this can be changed by the user).
+##
 ## If should_come_after is set to true, the named mod must appear after this
 ## mod. This is useful in situations like requiring AnimationApplier for
 ## animations to be applied from a MediaPipeController module, which generates
 ## the blend shapes.
-func check_mod_dependency(
-	mod_or_classname_before : Variant,
-	should_come_after : bool = false) -> bool:
+func check_mod_dependency(mod: Variant, should_come_after := false) -> bool:
 
 	var found_me : bool = false
 
@@ -489,12 +491,14 @@ func check_mod_dependency(
 
 		# Is this our target? Match typename and exact reference.
 		var found_target : bool = false
-		if mod_or_classname_before is String:
+		if mod is String:
 			# FIXME: This won't match child classes of the named class.
-			if child.get_script().get_global_name() == mod_or_classname_before:
+			if child.get_script().get_global_name() == mod:
 				found_target = true
-			pass
-		elif mod_or_classname_before == child:
+		elif mod is Script:
+			if child.get_script() == mod:
+				found_target = true
+		elif mod == child:
 			found_target = true
 
 		if found_target:
@@ -518,6 +522,14 @@ func check_mod_dependency(
 
 	# Did not find the mod at all.
 	return false
+
+func get_model_height_scale() -> float:
+	var skel: Skeleton3D = get_skeleton()
+	var head_pos: Vector3 = skel.get_bone_global_rest(skel.find_bone("Head")).origin
+	var model_height_approx = head_pos.y
+	# Arbitrary scale value here determined by the result of this math from
+	# Kiri's snake model. :P
+	return model_height_approx / 1.8
 
 #endregion
 
@@ -885,7 +897,9 @@ func settings_window_add_colorpicker(
 	return outer_container
 
 func settings_window_add_vector3(
-	setting_label : String, setting_name : String) -> Control:
+	setting_label : String, setting_name : String,
+	min_value : float = -100.0, max_value : float = 100.0,
+	step : float = 0.01) -> Control:
 
 	var outer_container : VBoxContainer = VBoxContainer.new()
 	outer_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -895,11 +909,16 @@ func settings_window_add_vector3(
 
 	var vec3_widget : VectorSettingWidget = \
 		load("res://Core/UI/VectorSettingWidget.tscn").instantiate()
+
+	vec3_widget.min_value = min_value
+	vec3_widget.max_value = max_value
+	vec3_widget.step = step
+
 	vec3_widget.custom_minimum_size.y = 32
 	vec3_widget.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	outer_container.add_child(label_widget)
-	
+
 	var default_value = get(setting_name)
 	
 	var reset_default = Button.new()

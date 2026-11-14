@@ -1,20 +1,25 @@
 extends Mod_Base
 class_name Mod_PoseIK
 
-var lean_scale : float = 4.0
+var lean_scale : float = 6.0
 var chest_yaw_scale : float = 0.3
 # FIXME: Add settings for all of these.
-var do_hands : bool = true
 var lock_fingers_to_single_axis_of_rotation : bool = false # FIXME: only false for thumb
 var lock_fingers_to_z_axis : bool = true
 var debug_visible_hand_trackers : bool = false
 var hack_reset_hips_every_frame : bool = true
 var hack_reset_shoulders_every_frame : bool = true
-var hip_adjustment_speed : float = 1.0
-var head_vertical_offset : float = -0.2
-var hips_vertical_blend_speed : float = 6.0
+var hip_adjustment_speed : float = 2.0
+var head_vertical_offset : float = 0.0
+var hips_vertical_blend_speed : float = 5.0
+var shoulder_raise_max_angle: float = 30.0
+var shoulder_raise_rotation_scale: float = 1.0
+var smooth_vertical_hips_movement: bool = false
+var spine_stretch: float = 0.01
 
-# FIXME: This should be a dictionary.
+var debug_pole_targets: bool = false
+var distribute_arm_bone_roll: bool = true
+
 var _ikchains_dict : Dictionary = {
 	"arm_left" : null,
 	"arm_right" : null,
@@ -147,6 +152,23 @@ const finger_bone_array_array : Array[Array] = [
 	]
 ]
 
+var polemodifier_left_arm: KiriPoleTargetModifier3D = null
+var polemodifier_right_arm: KiriPoleTargetModifier3D = null
+
+# Euler angles to use with Basis.from_euler().
+var pole_target_angle_arms_down:            Vector3 = Vector3(0.0,  180.0, 0.0)
+var pole_target_angle_hands_up:             Vector3 = Vector3(67.0,  40.0, 0.0)
+var pole_target_angle_hands_across:         Vector3 = Vector3(18.0,  50.0, 0.0)
+var pole_target_angle_hands_above_shoulder: Vector3 = Vector3( 0.0, 140.0, 0.0)
+var pole_target_alpha_scale_hands_above_shoulder: float = 2.0
+
+var shoulder_lean_counter_rotation_scale: float = 1.0
+var shoulder_rotate_forward_scale: float = 1.0
+var shoulder_rotate_forward_angle_limit: float = 60.0
+
+var upperarm_counter_rotation_scale: float = 0.5
+var upperarm_counter_rotation_threshold_start: float = -0.1
+var upperarm_counter_rotation_threshold_end: float = 0.1
 
 func _clear_ik_chains() -> void:
 	for key in _ikchains_dict.keys():
@@ -158,7 +180,7 @@ func _ready() -> void:
 
 	add_tracked_setting(
 		"lean_scale", "Lean Scale",
-		{ "min" : -6.0, "max" : 6.0 },
+		{ "min" : -20.0, "max" : 20.0 },
 		"advanced")
 
 	add_tracked_setting(
@@ -182,8 +204,13 @@ func _ready() -> void:
 
 	add_tracked_setting(
 		"head_vertical_offset", "Head vertical offset",
-		{ "min" : -1.0, "max" : 1.0 },
+		{ "min" : -1.0, "max" : 1.0, "step": 0.01 },
 		"advanced")
+
+	add_tracked_setting(
+		"smooth_vertical_hips_movement",
+		"Blend hips vertical movement", {}, "advanced")
+
 	add_tracked_setting(
 		"hips_vertical_blend_speed", "Hips vertical blend speed",
 		{ "min" : 0.0, "max" : 20.0 },
@@ -191,15 +218,77 @@ func _ready() -> void:
 	add_tracked_setting(
 		"hip_adjustment_speed", "Hip Adjustment Speed", { "min" : 0.0, "max" : 10.0 },
 		"advanced")
+	add_tracked_setting(
+		"spine_stretch", "Spine stretch", { "min": 0.0, "max": 1.0, "step": 0.001 }, "advanced")
+
+	add_tracked_setting(
+		"shoulder_raise_max_angle", "Shoulder rotation max angle", { "min" : 0.0, "max" : 90.0 },
+		"advanced")
+	add_tracked_setting(
+		"shoulder_raise_rotation_scale", "Shoulder rotation scale", { "min" : 0.0, "max" : 10.0 },
+		"advanced")
+	add_tracked_setting(
+		"shoulder_lean_counter_rotation_scale", "Counter-rotated inside shoulder for lean scale", { "min" : 0.0, "max" : 2.0 },
+		"advanced")
+
+	add_tracked_setting(
+		"distribute_arm_bone_roll", "Distribute arm bone roll along chain", {}, "advanced");
+
+	# Euler angles to use with Basis.from_euler().
+	add_setting_group("pole_targets", "Pole Target pitch/yaw/roll")
+	add_tracked_setting("debug_pole_targets", "Show pole targts for debugging", {}, "pole_targets")
+	add_tracked_setting("pole_target_angle_arms_down", "Arms down", {"min": -180.0, "max": 180.0, "step": 0.01}, "pole_targets")
+	add_tracked_setting("pole_target_angle_hands_up", "Hands up", {"min": -180.0, "max": 180.0, "step": 0.01}, "pole_targets")
+	add_tracked_setting("pole_target_angle_hands_across", "Reaching across the chest", {"min": -180.0, "max": 180.0, "step": 0.01}, "pole_targets")
+	add_tracked_setting("pole_target_angle_hands_above_shoulder", "Hands above shoulders", {"min": -180.0, "max": 180.0, "step": 0.01}, "pole_targets")
+	add_tracked_setting("pole_target_alpha_scale_hands_above_shoulder", "Hands above shoulder alpha scale", {"min": 0.0, "max": 5.0, "step": 0.01}, "pole_targets")
+
+	add_setting_group("shoulder_rotate_forard", "Rotate shoulder forward when arms across chest")
+	add_tracked_setting("shoulder_rotate_forward_scale", "Shoulder forward rotation scale", {"min": 0.0, "max": 2.0, "step": 0.01}, "shoulder_rotate_forard")
+	add_tracked_setting("shoulder_rotate_forward_angle_limit", "Shoulder forward rotation limit", {"min": 0.0, "max": 180.0, "step": 0.1}, "shoulder_rotate_forard")
+
+	add_setting_group("upper_arm_counter_rotation", "Upper arm counter-rotation (keep bicep in reasonable direction)")
+	add_tracked_setting("upperarm_counter_rotation_scale", "Upper arm counter-rotation scale", {"min": 0.0, "max": 2.0, "step": 0.01}, "upper_arm_counter_rotation")
+	add_tracked_setting("upperarm_counter_rotation_threshold_start", "Upper arm counter-rotation threshold start", {"min": -1.0, "max": 1.0, "step": 0.01}, "upper_arm_counter_rotation")
+	add_tracked_setting("upperarm_counter_rotation_threshold_end", "Upper arm counter-rotation threshold end", {"min": -1.0, "max": 1.0, "step": 0.01}, "upper_arm_counter_rotation")
 
 	_reinit()
 
 func scene_init() -> void:
 	_reinit()
 
+	var skel: Skeleton3D = get_skeleton()
+
+	# Set up pole target modifiers for left/right arms.
+	#
+	# Set them to inactive so we can trigger their modification at a specific
+	# point in the PoseIK process.
+	polemodifier_left_arm = KiriPoleTargetModifier3D.new()
+	skel.add_child(polemodifier_left_arm)
+	polemodifier_left_arm.angle_offset = -PI/2
+	polemodifier_left_arm.root_bone = "LeftUpperArm"
+	polemodifier_left_arm.target_bone = "LeftHand"
+	polemodifier_left_arm.pole_target_node = polemodifier_left_arm.get_path_to($PoleTargetElbowLeft)
+	polemodifier_left_arm.active = false
+	polemodifier_right_arm = KiriPoleTargetModifier3D.new()
+	skel.add_child(polemodifier_right_arm)
+	polemodifier_right_arm.angle_offset = PI/2
+	polemodifier_right_arm.root_bone = "RightUpperArm"
+	polemodifier_right_arm.target_bone = "RightHand"
+	polemodifier_right_arm.pole_target_node = polemodifier_right_arm.get_path_to($PoleTargetElbowRight)
+	polemodifier_right_arm.active = false
+
 func scene_shutdown() -> void:
 	_init_complete = false
 	_clear_ik_chains()
+
+	if polemodifier_left_arm:
+		polemodifier_left_arm.queue_free()
+		polemodifier_left_arm = null
+
+	if polemodifier_right_arm:
+		polemodifier_right_arm.queue_free()
+		polemodifier_right_arm = null
 
 func load_after(_settings_old : Dictionary, _settings_new : Dictionary):
 	_reinit()
@@ -215,6 +304,9 @@ func _update_local_trackers() -> void:
 
 	if tracker_dict.has("head"):
 		$Head.global_transform = tracker_dict["head"].transform
+		
+		var head_offset: Vector3 = Vector3(0.0, head_vertical_offset * get_model_height_scale(), 0.0)
+		$Head.global_transform.origin += head_offset * tracker_dict["head"].transform.basis
 	if tracker_dict.has("hand_left"):
 		$Hand_Left.global_transform = tracker_dict["hand_left"].transform
 	if tracker_dict.has("hand_right"):
@@ -303,123 +395,98 @@ func _process(delta : float) -> void:
 	# This just moves the body based on the head position.
 	var head_pos = $Head.transform.origin
 	var model_pos = model_root.transform.origin
-	
-	if true: # FIXME: ???????
-		model_root.transform.origin = model_pos.lerp(head_pos, delta * hip_adjustment_speed)
-		#model_root.transform.origin = head_pos
-		#model_root.transform.origin.y = model_y 
-		#model_root.transform.origin.y = lerp(model_pos.y, head_pos.y - 1.9, 0.01)
-		
-		# FIXME: Another hack!
-		var head_rest_transform = get_skeleton().get_bone_global_rest(
-			get_skeleton().find_bone("Head"))
-		#print(head_rest_transform.origin.y)
-		
-		# FIXME: Hard-coded fudge factor.
-		# FIXME: Why can't we just map this directly again? It looks like we're shrugging when the arms get set up wrong or something.
+
+	# Adjust the hips x/z values. y is also set, but will be overwritten by the
+	# hips adjustment.
+	model_root.transform.origin = model_pos.lerp(head_pos, delta * hip_adjustment_speed)
+
+	# FIXME: Another hack!
+	var head_rest_transform = get_skeleton().get_bone_global_rest(
+		get_skeleton().find_bone("Head"))
+
+	# Adjust hips y value.
+	if smooth_vertical_hips_movement:
 		model_root.transform.origin.y = lerp(
-			model_pos.y, head_pos.y - head_rest_transform.origin.y + head_vertical_offset,
+			model_pos.y,
+			head_pos.y - head_rest_transform.origin.y - spine_stretch * get_model_height_scale(),
 			clamp(hips_vertical_blend_speed * delta, 0.0, 1.0))
+	else:
+		model_root.transform.origin.y = \
+			head_pos.y - head_rest_transform.origin.y
 
 	# ---------------------------------------------------------------------
 	# IK stuff starts here
-
-	# Arm IK.
-	var x_pole_dist = 10.0
-	var z_pole_dist = 10.0
-	var y_pole_dist = 5.0
-
-	for chain_name in ["arm_left", "arm_right"]:
-
-		var tracker_to_use = $Hand_Left
-		var compensation_alpha_scale = 1.0
-		var pole_target_x = x_pole_dist
-		if chain_name == "arm_right": # FIXME: Hack.
-			tracker_to_use = $Hand_Right
-			compensation_alpha_scale *= -1.0
-			pole_target_x = -x_pole_dist
-
-		var tracker_local_position = \
-			skel.get_global_transform().inverse() * tracker_to_use.get_global_transform()
-		var base_bone_position = skel.get_bone_global_pose(
-			skel.find_bone(_ikchains_dict[chain_name].base_bone)).origin
-		#print(tracker_local_position.origin.x - bone_position.x)
-		
-		# See if we can raise the shoulders for when arms go too far up.
-		if chain_name == "arm_left" or chain_name == "arm_right":
-			var chest_bone_index : int = skel.find_bone("Chest")
-			if chest_bone_index != -1:
-				var chest_pose = skel.get_bone_global_pose(chest_bone_index)
-
-				# FIXME: We really need to parameterize this all in a less
-				# silly way.
-				var rotation_scale = 1.0
-				var shoulder_bone = "LeftShoulder"
-				if tracker_to_use == $Hand_Right:
-					shoulder_bone = "RightShoulder"
-					rotation_scale = -rotation_scale
-
-				var shoulder_bone_index = skel.find_bone(shoulder_bone)
-				if shoulder_bone_index != -1:
-					var shoulder_pose = skel.get_bone_global_pose(shoulder_bone_index)
-					var chest_pose_inv = chest_pose.inverse()
-					var shoulder_y = (chest_pose_inv * shoulder_pose).origin.y
-					var tracker_local_chest = chest_pose_inv * tracker_local_position
-					if tracker_local_chest.origin.y > shoulder_y:
-						#print(tracker_local_chest.origin.y - shoulder_y)
-						skel.set_bone_pose_rotation(shoulder_bone_index,
-							Quaternion(Vector3(0.0, 0.0, 1.0), (tracker_local_chest.origin.y - shoulder_y) * 2.0 * rotation_scale) *
-							skel.get_bone_rest(shoulder_bone_index).basis.get_rotation_quaternion())
-
-		var pole_target_y = -y_pole_dist
-		var pole_target_z = -z_pole_dist
-
-		# Rotate pole target upwards when the arm reaches across the
-		# chest.
-		if (tracker_local_position.origin.x - base_bone_position.x) * compensation_alpha_scale < 0:
-			var alpha = -(tracker_local_position.origin.x - base_bone_position.x) * 3.0 * compensation_alpha_scale
-			#print(alpha)
-			pole_target_y = lerp(-y_pole_dist, 0.0, alpha)
-			pole_target_z = lerp(-z_pole_dist, 0.0, alpha)
-		
-		# Move pole target backwards when the arm is lowered.
-		#
-		# FIXME: Hardcoded values.
-		var arm_below_factor = (tracker_local_position.origin.y - base_bone_position.y) + 0.25
-		arm_below_factor *= 1.0
-		if arm_below_factor < 0.0:
-			var alpha = arm_below_factor
-			# FIXME: Hardcoded values.
-			pole_target_z = lerp(pole_target_z, 100.0, alpha)
-			pole_target_x = lerp(pole_target_x, 100.0 * compensation_alpha_scale, alpha)
-
-		
-		_ikchains_dict[chain_name].pole_direction_target = Vector3(
-			pole_target_x, pole_target_y, pole_target_z)
-
-	# FIXME: Fix this comment.
-	# Do hand stuff.
-	if do_hands:
-		update_hand(hand_landmarks_left, "Left")
-		update_hand(hand_landmarks_right, "Right")
 
 	# Solve spine.
 	for chain_name in ["spine"]:
 		_ikchains_dict[chain_name].do_ik_chain()
 
+	# Arm IK.
+
+	for chain_name in ["arm_left", "arm_right"]:
+
+		var side: String = "Left"
+		if chain_name == "arm_right":
+			side = "Right"
+
+		var arms_above_shoulder_alpha: float = \
+			_calculate_arms_above_shoulders_alpha(chain_name)
+
+		# Adjust shoulders upward when the arm is raised up past a certain
+		# point. Depends on tracker position and chest bone already being in the
+		# right transform.
+		_adjust_shoulders_for_arms_up(chain_name, arms_above_shoulder_alpha)
+
+		# Determine how much we're reaching across the chest so we can pivot the
+		# pole target upwards. Depends on shoulder bone transform and tracker.
+		var arm_across_chest_alpha: float = _calculate_arm_across_chest_alpha(chain_name)
+
+		# Rotate the shoulder forward a bit if we're reaching across the chest.
+		_rotate_shoulder_forward(chain_name, arm_across_chest_alpha)
+
+		# Update IK chain.
+		_ikchains_dict[chain_name].do_ik_chain()
+
+		# Update fingers and stuff.
+		if chain_name == "arm_right":
+			update_hand(hand_landmarks_right, side)
+		else:
+			update_hand(hand_landmarks_left, side)
+
+		# Determine how much the arms are lowered so we can move the pole
+		# targets backwards, so the elbows face back.
+		var arms_down_alpha: float = _calculate_arms_down_alpha(chain_name)
+
+		var pole_target_vec: Vector3 = _calculate_final_pole_target_position(
+			chain_name, arms_down_alpha, arm_across_chest_alpha,
+			arms_above_shoulder_alpha)
+
+		# Actually do the pole target stuff.
+		if chain_name == "arm_left":
+			$PoleTargetElbowLeft.transform.origin = pole_target_vec
+			polemodifier_left_arm._do_rotation_update(delta, true)
+		else:
+			$PoleTargetElbowRight.transform.origin = pole_target_vec
+			polemodifier_right_arm._do_rotation_update(delta, true)
+
+		# Counter-rotate upper arm (hack). This keeps the bicep from pointing
+		# outwards when the arm goes outwards.
+		_fix_upperarm_HACK(chain_name)
+
+	# Debug display of pole targets.
+	_update_debug_draw_pole_targets()
+
 	# ---------------------------------------------------------------------------------------------
 	# Handle Leaning
 
-	var lean_check_axis : Vector3 = (skel.transform * skel.get_bone_global_pose(skel.find_bone("Hips"))).basis * Vector3(1.0, 0.0, 0.0)
-	lean_check_axis = lean_check_axis.normalized()
-	var head_offset : Vector3 = tracker_dict["head"]["transform"].origin - model_root.transform.origin
-	var lean_amount : float = sin(lean_check_axis.dot(head_offset))
+	# Lean the entire model based on the head rotation/movement.
+	var root_pose: Transform3D = \
+		skel.global_transform * skel.get_bone_global_pose(skel.find_bone("Root"))
+	var hips_inv: Transform3D = \
+		root_pose.inverse()
+	var head_in_root_space: Vector3 = hips_inv * tracker_dict.head.transform.origin
+	var lean_amount: float = -head_in_root_space.x / get_model_height_scale() 
 	handle_lean(skel, lean_amount * lean_scale)
-
-	# Solve arms.
-	for chain_name in ["arm_left", "arm_right"]:
-		_ikchains_dict[chain_name].do_ik_chain()
-
 
 func _reinit() -> void:
 	_reset_hand_landmarks()
@@ -441,7 +508,6 @@ func _setup_ik_chains():
 	chain_spine.do_yaw = true
 	chain_spine.main_axis_of_rotation = Vector3(1.0, 0.0, 0.0)
 	chain_spine.secondary_axis_of_rotation = Vector3(0.0, 1.0, 0.0)
-	chain_spine.pole_direction_target = Vector3(0.0, 0.0, 0.0) # No pole target
 	chain_spine.tracker_object = $Head
 	chain_spine.yaw_scale = chest_yaw_scale
 
@@ -451,10 +517,6 @@ func _setup_ik_chains():
 
 	_ikchains_dict["spine"] = chain_spine
 
-	var x_pole_dist = 10.0
-	var z_pole_dist = 10.0
-	var y_pole_dist = 5.0
-	
 	var arm_rotation_axis = Vector3(0.0, 1.0, 0.0).normalized()
 
 	var hand_tracker_left : Node3D = $Hand_Left
@@ -470,19 +532,15 @@ func _setup_ik_chains():
 		chain_hand.rotation_low = 0.05 * PI
 		chain_hand.rotation_high = 2.0 * 0.99 * PI
 		chain_hand.do_yaw = false
-		chain_hand.do_bone_roll = true
+		chain_hand.do_bone_roll = distribute_arm_bone_roll
 		chain_hand.secondary_axis_of_rotation = Vector3(0.0, 1.0, 0.0)
 
 		if side == "Left":
 			chain_hand.main_axis_of_rotation = -arm_rotation_axis
-			chain_hand.pole_direction_target = Vector3(
-				x_pole_dist, -y_pole_dist, -z_pole_dist)
 			chain_hand.tracker_object = hand_tracker_left
 			_ikchains_dict["arm_left"] = chain_hand
 		else:
 			chain_hand.main_axis_of_rotation = arm_rotation_axis
-			chain_hand.pole_direction_target = Vector3(
-				-x_pole_dist, -y_pole_dist, -z_pole_dist)
 			chain_hand.tracker_object = hand_tracker_right
 			_ikchains_dict["arm_right"] = chain_hand
 
@@ -517,6 +575,7 @@ func _reset_hand_landmarks():
 # This function will rotate a bone in the global (skeleton object) coordiate
 # space, as though it were in its rest position. So hardcoded Y axis can be
 # used for elbow, hardcoded X axis can be used for spine, etc.
+# FIXME(GIANTESS): Stop using this. We should be doing things in local coordinate spaces.
 static func rotate_bone_in_global_space(
 	skel : Skeleton3D,
 	bone_index : int,
@@ -560,6 +619,16 @@ func handle_lean(skel : Skeleton3D, angle : float):
 		rotate_bone_in_global_space(skel, current_bone, Vector3(0.0, 0.0, 1.0), angle, true)
 		current_bone = skel.get_bone_parent(current_bone)
 
+	# Apply counter-rotation to shoulder on the side we're leaning into.
+	var arm_bone_to_modify: String = "LeftShoulder"
+	if angle > 0:
+		arm_bone_to_modify = "RightShoulder"
+
+	var arm_bone_idx: int = skel.find_bone(arm_bone_to_modify)
+	var current_arm_bone_transform: Transform3D = skel.get_bone_pose(arm_bone_idx)
+	var new_transform: Transform3D = current_arm_bone_transform.rotated(Vector3(0.0, 0.0, 1.0), -angle * shoulder_lean_counter_rotation_scale)
+	skel.set_bone_pose(arm_bone_idx, new_transform)
+
 func update_hand(hand_landmarks : Array, which_hand : String):
 
 	if len(hand_landmarks) < 21:
@@ -572,6 +641,11 @@ func update_hand(hand_landmarks : Array, which_hand : String):
 func _update_finger_chain(finger_bone_array : Array, hand_landmarks : Array, which_hand : String) -> void:
 
 	var tracker_dict : Dictionary = get_global_mod_data("trackers")
+
+	# Don't update fingers on inactive hands.
+	# FIXME: Just return to rest pose for these fingers?
+	if not tracker_dict["hand_" + which_hand.to_lower()].active:
+		return
 
 	var skel : Skeleton3D = get_skeleton()
 	var finger_rotation_main_axis : Vector3 = Vector3(0, 0, 0)
@@ -648,14 +722,15 @@ func _update_finger_chain(finger_bone_array : Array, hand_landmarks : Array, whi
 			rotation_axis_local = Vector3(-1, 0, 0)
 
 		# Convert that to a rotation offset from the rest rotation.
-		var global_rotation_from_rest = skel.get_bone_global_rest(bone_to_modify_index).basis * rotation_axis_local
+		var local_rotation_axis_from_rest: Vector3 = \
+			skel.get_bone_global_rest(bone_to_modify_index).basis * rotation_axis_local
 
 		var hand_index = "hand_" + which_hand.to_lower()
 		if tracker_dict.has(hand_index):
 			if not tracker_dict[hand_index]:
 				skel.set_bone_pose_rotation(bone_to_modify_index, Basis())
 			else:
-				rotate_bone_in_global_space(skel, bone_to_modify_index, global_rotation_from_rest, -angle_between)
+				rotate_bone_in_global_space(skel, bone_to_modify_index, local_rotation_axis_from_rest, -angle_between)
 
 		is_first_bone = false
 
@@ -664,3 +739,347 @@ func check_configuration() -> PackedStringArray:
 	if not check_mod_dependency("Mod_MediaPipeController", false):
 		errors.append("No MediaPipeController detected before PoseIK. There is nothing to feed tracker data into the PoseIK system.")
 	return errors
+
+func _calculate_arm_across_chest_alpha(chain_name: String) -> float:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	# Figure out left/right strings and trackers based on which side we're
+	# on.
+	var tracker_to_use: Node3D = $Hand_Left
+	var side: String = "Left"
+	var otherside: String = "Right"
+	if chain_name == "arm_right":
+		tracker_to_use = $Hand_Right
+		side = "Right"
+		otherside = "Left"
+
+	# Get the position of this shoulder. We're using the UpperArm because we
+	# really want the "tail" of the Shoulder bone, or where it effectively ends
+	# up anyway.
+	var upper_arm_index: int = skel.find_bone(side + "UpperArm")
+	var upper_arm_pos_global: Vector3 = skel.global_transform * skel \
+		.get_bone_global_pose(upper_arm_index) \
+		.origin
+
+	# Get the position of the OTHER shoulder.
+	var other_upper_arm_index: int = skel.find_bone(otherside + "UpperArm")
+	var other_upper_arm_pos_global: Vector3 = skel.global_transform * skel \
+		.get_bone_global_pose(other_upper_arm_index) \
+		.origin
+
+	# Get the midpoint between the two upper arms. Should end up in the base of
+	# the next/top of the chest area.
+	var midpoint: Vector3 = (other_upper_arm_pos_global + upper_arm_pos_global) / 2.0
+
+	# Get the offset from that midpoint for THIS arm.
+	var upper_arm_offset_from_center: Vector3 = upper_arm_pos_global - midpoint
+
+	# Create a normalized axis to check against.
+	var axis_to_check: Vector3 = upper_arm_offset_from_center.normalized()
+	
+	# Get the offset of the hand tracker from the midpoint.
+	var vector_to_check_against_axis: Vector3 = \
+		tracker_to_use.get_global_transform().origin - midpoint
+
+	# Project the tracker onto that axis to figure out how far between the two
+	# shoulders we are. Or, more specifically, how far we are between this
+	# shoulder and the center of the two shoulders.
+	var dp: float = vector_to_check_against_axis.dot(axis_to_check)
+
+	# Convert that to percentage based on the breadth of the shoulders.
+	var dp_percentage: float = dp / upper_arm_offset_from_center.length()
+
+	# FIXME(GIANTESS): make configurable value for the 1.0 and 0.75 (starting
+	#   threshold and scaling of alpha value)
+	var final_alpha: float = clamp(0.75 * (1.0 -dp_percentage), 0.0, 1.0)
+
+	# That's our output.
+	return final_alpha
+
+func _calculate_arms_down_alpha(chain_name: String) -> float:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	var chest_bone_index: int = skel.find_bone("Chest")
+	var chest_bone_tx: Transform3D = skel.global_transform * skel.get_bone_global_pose(chest_bone_index)
+	var chest_bone_tx_inv = chest_bone_tx.inverse()
+
+	# Figure out left/right strings and trackers based on which side we're
+	# on.
+	var tracker_to_use: Node3D = $Hand_Left
+	if chain_name == "arm_right":
+		tracker_to_use = $Hand_Right
+
+	var tracker_in_chest_space: Vector3 = \
+		chest_bone_tx_inv * \
+		tracker_to_use.get_global_transform().origin
+
+	# Move pole target backwards when the arm is lowered.
+	#
+	# FIXME(GIANTESS): Make configurable!
+	# Number from 0 to 1, indicating how far down an arm must be for the
+	# elbows-back pole target to kick in.
+	var arm_lowered_threshold: float = 0.25
+	# Same as above, but what point the pole target direction should max
+	# out.
+	var arm_lowered_max: float = 1.0
+
+	var hand_rest_position: Vector3 = \
+		skel.get_bone_global_rest(
+			skel.find_bone(_ikchains_dict[chain_name].tip_bone)).origin
+	var base_bone_rest_position: Vector3 = \
+		skel.get_bone_global_rest(
+			skel.find_bone(_ikchains_dict[chain_name].base_bone)).origin
+	var arm_length: float = (hand_rest_position - base_bone_rest_position).length()
+	
+	var base_bone_in_chest_space = chest_bone_tx_inv * \
+		skel.global_transform * \
+		skel.get_bone_global_pose(
+			skel.find_bone(_ikchains_dict[chain_name].base_bone)).origin
+
+	var t = (base_bone_in_chest_space.y - tracker_in_chest_space.y) / arm_length
+	return smoothstep(arm_lowered_threshold, arm_lowered_max, t)
+
+func _calculate_arms_above_shoulders_alpha(chain_name: String) -> float:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	# Figure out left/right strings and trackers based on which side we're
+	# on.
+	var tracker_to_use: Node3D = $Hand_Left
+	var side: String = "Left"
+	var otherside: String = "Right"
+	if chain_name == "arm_right":
+		tracker_to_use = $Hand_Right
+		side = "Right"
+		otherside = "Left"
+
+	# Get the position of this shoulder.
+	var upper_arm_index: int = skel.find_bone(side + "UpperArm")
+	var upper_arm_pos_global: Vector3 = skel.global_transform * skel \
+		.get_bone_global_pose(upper_arm_index) \
+		.origin
+
+	# Get the position of the OTHER shoulder.
+	var other_upper_arm_index: int = skel.find_bone(otherside + "UpperArm")
+	var other_upper_arm_pos_global: Vector3 = skel.global_transform * skel \
+		.get_bone_global_pose(other_upper_arm_index) \
+		.origin
+
+	var chest_bone_index: int = skel.find_bone("Chest")
+	var chest_bone_tx: Transform3D = skel.global_transform * skel.get_bone_global_pose(chest_bone_index)
+	var chest_bone_tx_inv = chest_bone_tx.inverse()
+
+	# Get the midpoint between the two upper arms. Should end up in the base of
+	# the next/top of the chest area.
+	var midpoint: Vector3 = (other_upper_arm_pos_global + upper_arm_pos_global) / 2.0
+
+	var midpoint_in_chest_space: Vector3 = chest_bone_tx_inv * midpoint
+	var hand_tracker_in_chest_space: Vector3 = chest_bone_tx_inv * tracker_to_use.global_transform.origin
+
+	var offset_from_shoulder_mid: Vector3 = \
+		hand_tracker_in_chest_space - midpoint_in_chest_space
+
+	offset_from_shoulder_mid /= get_model_height_scale()
+
+	return clamp(
+		offset_from_shoulder_mid.y * pole_target_alpha_scale_hands_above_shoulder,
+		0.0, 1.0)
+
+func _calculate_final_pole_target_position(
+	chain_name: String,
+	arms_down_alpha: float,
+	arm_across_chest_alpha: float,
+	arms_above_shoulder_alpha: float) -> Vector3:
+
+	var skel: Skeleton3D = get_skeleton()
+	var chest_bone_index: int = skel.find_bone("Chest")
+	var chest_bone_tx: Transform3D = skel.global_transform * skel.get_bone_global_pose(chest_bone_index)
+
+	# Figure out final pole target location.
+	var adjusted_pole_target_angle_arms_down: Vector3 = pole_target_angle_arms_down * PI/180.0
+	var adjusted_pole_target_angle_hands_up: Vector3 = pole_target_angle_hands_up * PI/180.0
+	var adjusted_pole_target_angle_hands_across: Vector3 = pole_target_angle_hands_across * PI/180.0
+	var adjusted_pole_target_angle_hands_above_shoulder: Vector3 = pole_target_angle_hands_above_shoulder * PI/180.0
+
+	# Figure out left/right strings and trackers based on which side we're
+	# on.
+	if chain_name == "arm_right":
+		adjusted_pole_target_angle_arms_down.y *= -1.0
+		adjusted_pole_target_angle_hands_up.y *= -1.0
+		adjusted_pole_target_angle_hands_across.y *= -1.0
+		adjusted_pole_target_angle_hands_above_shoulder *= -1.0
+
+	var pole_target_basis_arms_down: Basis = Basis.from_euler(adjusted_pole_target_angle_arms_down)
+	var pole_target_basis_hands_up: Basis = Basis.from_euler(adjusted_pole_target_angle_hands_up)
+	var pole_target_basis_hands_across: Basis = Basis.from_euler(adjusted_pole_target_angle_hands_across)
+	var pole_target_basis_hands_above_shoulders: Basis = Basis.from_euler(adjusted_pole_target_angle_hands_above_shoulder)
+
+	var final_basis: Basis = pole_target_basis_hands_up \
+		.slerp(pole_target_basis_arms_down, arms_down_alpha) \
+		.slerp(pole_target_basis_hands_across, arm_across_chest_alpha) \
+		.slerp(pole_target_basis_hands_above_shoulders, arms_above_shoulder_alpha)
+
+	# FIXME(GIANTESS): Change the hardcoded value for distance here.
+	var pole_target_vec: Vector3 = chest_bone_tx * (final_basis * Vector3(0.0, 0.0, 100.0))
+
+	return pole_target_vec
+
+func _adjust_shoulders_for_arms_up(chain_name: String, alpha: float) -> void:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	var rotation_scale: float = shoulder_raise_rotation_scale
+	var rotation_max: float = shoulder_raise_max_angle * (PI/180)
+
+	# Figure out left/right strings, trackers, and inverted scales based on
+	# which side we're on.
+	var shoulder_bone: String = "LeftShoulder"
+	if chain_name == "arm_right":
+		shoulder_bone = "RightShoulder"
+		rotation_scale = -rotation_scale
+
+	var shoulder_bone_index = skel.find_bone(shoulder_bone)
+	if shoulder_bone_index != -1:
+
+		var shoulder_rotation_angle: float = rotation_scale * alpha
+
+		# Clamp it.
+		shoulder_rotation_angle = clampf(shoulder_rotation_angle, -rotation_max, rotation_max)
+
+		# Actually rotate the thing!
+		skel.set_bone_pose_rotation(shoulder_bone_index,
+			Quaternion(Vector3(0.0, 0.0, 1.0), shoulder_rotation_angle) *
+			skel.get_bone_rest(shoulder_bone_index).basis.get_rotation_quaternion())
+
+# Debug display of pole targets.
+func _update_debug_draw_pole_targets() -> void:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	if debug_pole_targets:
+
+		var debug_mesh: ImmediateMesh = get_app().get_debug_mesh()
+		debug_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+		for side: String in ["Left", "Right"]:
+
+			var upper_pos: Vector3 = skel.global_transform * skel.get_bone_global_pose(skel.find_bone(side + "UpperArm")).origin
+			var lower_pos: Vector3 = skel.global_transform * skel.get_bone_global_pose(skel.find_bone(side + "Hand")).origin
+			var midpoint: Vector3 = (upper_pos + lower_pos) / 2.0
+			
+			var target: Node3D = $PoleTargetElbowLeft
+			if side == "Right":
+				target = $PoleTargetElbowRight
+
+			# Line from top of arm to hand.
+			debug_mesh.surface_set_color(Color.RED)
+			debug_mesh.surface_add_vertex(upper_pos)
+			debug_mesh.surface_set_color(Color.GREEN)
+			debug_mesh.surface_add_vertex(lower_pos)
+
+			# Line from midpoint to pole target.
+			var midpoint_offset: Vector3 = target.global_transform.origin - midpoint
+			midpoint_offset = midpoint_offset.normalized() * get_model_height_scale()
+			debug_mesh.surface_set_color(Color.BLUE)
+			debug_mesh.surface_add_vertex(midpoint)
+			debug_mesh.surface_set_color(Color.CYAN)
+			debug_mesh.surface_add_vertex(midpoint + midpoint_offset)
+
+		debug_mesh.surface_end()
+
+	$PoleTargetElbowRight.visible = debug_pole_targets
+	$PoleTargetElbowLeft.visible = debug_pole_targets
+
+func _fix_upperarm_HACK(chain_name: String) -> void:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	var side: String = "Left"
+	if chain_name == "arm_right":
+		side = "Right"
+
+	var upperarm_index: int = skel.find_bone(side + "UpperArm")
+
+	# Preserve child transforms.
+	var children: Array = []
+	for child_index: int in skel.get_bone_children(upperarm_index):
+		children.push_back([child_index, skel.get_bone_global_pose(child_index),skel. get_bone_pose(child_index)])
+
+	# Axis we'll be rotating the upper arm by, and also to check how far
+	# we have to rotate.
+	var rotation_axis: Vector3 = skel.get_bone_global_pose(upperarm_index).basis * Vector3(0.0, 1.0, 0.0)
+
+	# Current forward vector for the upper arm.
+	var upperarm_forward_vector: Vector3 = skel.get_bone_global_pose(upperarm_index).basis * Vector3(1.0, 0.0, 0.0)
+
+	# Current forward vector for the chest (rotation target).
+	var chest_forward_vector: Vector3 = skel.get_bone_global_pose(skel.find_bone("Chest")).basis * Vector3(0.0, 0.0, 1.0)
+
+	# Get the dot product and cross product to construct the rotation
+	# from. DP tells us how much and CP tells us which way.
+	var cos_forward_displacement: float = upperarm_forward_vector.normalized().dot(chest_forward_vector.normalized())
+	var cross_forwards: Vector3 = upperarm_forward_vector.normalized().cross(chest_forward_vector.normalized())
+
+	# Flip stuff for mirrored side.
+	if side == "Left":
+		cos_forward_displacement *= -1.0
+
+	# Get the angle to rotate by.
+	var rotation_displacement: float = acos(cos_forward_displacement)
+
+	# Rotate outwards, but not inwards. We'll drop the rotation
+	# displacement to zero as it crosses from the cross product pointing
+	# one way and the other way. Basically, when the rotation direction
+	# flips and it crosses over its original orientation.
+	var axis_alignment: float = rotation_axis.dot(cross_forwards.normalized())
+	rotation_displacement = lerp(rotation_displacement, 0.0, smoothstep(
+		upperarm_counter_rotation_threshold_start,
+		upperarm_counter_rotation_threshold_end,
+		axis_alignment))
+
+	# Another mirror flip.
+	if side == "Right":
+		rotation_displacement *= -1
+
+	var rotation_displacement_scale: float = upperarm_counter_rotation_scale
+
+	# Set the rotation.
+	skel.set_bone_pose_rotation(upperarm_index,
+		Basis(skel.get_bone_pose_rotation(upperarm_index)) * \
+		Basis.from_euler(Vector3(0.0, rotation_displacement * rotation_displacement_scale, 0.0)) \
+	)
+
+	# Restore child transforms.
+	for child_record: Array in children:
+		skel.set_bone_global_pose(child_record[0], child_record[1])
+		skel.set_bone_pose_position(child_record[0], skel.get_bone_rest(child_record[0]).origin)
+
+func _rotate_shoulder_forward(chain_name: String, alpha: float) -> void:
+
+	var skel: Skeleton3D = get_skeleton()
+
+	var shoulder_bone: String = "LeftShoulder"
+	if chain_name == "arm_right":
+		shoulder_bone = "RightShoulder"
+	else:
+		alpha *= -1.0
+
+	var shoulder_rotation_angle: float = \
+		alpha * shoulder_rotate_forward_scale * \
+		shoulder_rotate_forward_angle_limit * PI/180.0
+
+	# Get the rotation offset from rest.
+	var shoulder_bone_idx: int = skel.find_bone(shoulder_bone)
+	var shoulder_bone_tx_offset: Transform3D = \
+		skel.get_bone_rest(shoulder_bone_idx).inverse() * \
+		skel.get_bone_pose(shoulder_bone_idx)
+
+	# Apply the offset.
+	shoulder_bone_tx_offset = shoulder_bone_tx_offset.rotated(
+		Vector3(0.0, 0.0, 1.0), shoulder_rotation_angle)
+
+	# Apply it to the pose/
+	skel.set_bone_pose(
+		shoulder_bone_idx,
+		skel.get_bone_rest(shoulder_bone_idx) * shoulder_bone_tx_offset)
