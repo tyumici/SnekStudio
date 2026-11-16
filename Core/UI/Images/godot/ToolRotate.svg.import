@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ccsrfh1nkg1av"
-path="res://.godot/imported/mod_disabled.svg-7aa1a3592c97773d84741a0df237ea60.ctex"
+uid="uid://b3cngtxe4rnc0"
+path="res://.godot/imported/ToolRotate.svg-7d29c66094f57f27f3dbccf5cc5bc1e9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Mods/DisabledMod/mod_disabled.svg"
-dest_files=["res://.godot/imported/mod_disabled.svg-7aa1a3592c97773d84741a0df237ea60.ctex"]
+source_file="res://Core/UI/Images/godot/ToolRotate.svg"
+dest_files=["res://.godot/imported/ToolRotate.svg-7d29c66094f57f27f3dbccf5cc5bc1e9.ctex"]
 
 [params]
 

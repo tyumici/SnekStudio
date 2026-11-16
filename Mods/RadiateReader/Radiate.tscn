@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://b52va5f64xr1k"]
+
+[ext_resource type="Script" uid="uid://cu88p2uaog2ug" path="res://Mods/RadiateReader/Radiate.gd" id="1_i3i5j"]
+[ext_resource type="AudioStream" uid="uid://c4co0k765efla" path="res://Mods/RadiateReader/radiate-1.wav" id="2_ui3p7"]
+
+[node name="Radiate" type="Node3D" unique_id=649926866]
+script = ExtResource("1_i3i5j")
+metadata/_custom_type_script = "uid://bsjotf2wtnmeq"
+
+[node name="RadiateNoiseClip" type="AudioStreamPlayer" parent="." unique_id=426605020]
+stream = ExtResource("2_ui3p7")
