@@ -13,3 +13,4 @@
 - Add visibility toggle to mod settings
 - Figure how out to update the font size
 - Fix chat box size so content wraps
+- Add mod toggles for the corner anchor
